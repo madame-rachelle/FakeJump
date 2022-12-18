@@ -1,0 +1,170 @@
+/*
+================================================================================
+Copyright 2022 Rachael Alexanderson
+
+Redistribution and use in source and binary forms, with or without modification,
+ are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+ list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+ this list of conditions and the following disclaimer in the documentation
+ and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+ may be used to endorse or promote products derived from this software without
+ specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+================================================================================
+*/
+version "4.9"
+
+class FakeJumpEventHandler : StaticEventHandler
+{
+	MoveDriver drivers[MAXPLAYERS];
+
+	void HandleSpawn(PlayerEvent e)
+	{
+		if (!drivers[e.PlayerNumber])
+		{
+			drivers[e.PlayerNumber] = MoveDriver(players[e.PlayerNumber].mo.Spawn("MoveDriver"));
+			drivers[e.PlayerNumber].Master = players[e.PlayerNumber].mo;
+		}
+		else
+			drivers[e.PlayerNumber].SetOrigin(players[e.PlayerNumber].mo.Pos, false);
+	}
+
+	override void PlayerSpawned(PlayerEvent e)
+	{
+		HandleSpawn(e);
+	}
+	override void PlayerRespawned(PlayerEvent e)
+	{
+		HandleSpawn(e);
+	}
+}
+
+class MoveDriver : actor
+{
+	bool IsFakeJumping;
+
+	playerinfo myp;
+
+	override void Tick()
+	{
+		UserCmd cmd;
+		PlayerPawn mym = PlayerPawn(master);
+
+		Super.Tick();
+
+		if (!mym)
+			return;
+		if (!master || !(master.Health > 0))
+			return;
+		if (!myp)
+			myp = master.player;
+		if (!myp)
+			return; // this is not supposed to happen, but, just in case ....
+
+		if (height != master.default.height)
+			A_SetSize(master.default.radius, master.default.height);
+		if (radius != master.default.radius)
+			A_SetSize(master.default.radius, master.default.height);
+
+		cmd = myp.cmd;
+
+		if (!Level.IsJumpingAllowed() && (cmd.buttons & BT_JUMP))
+		{
+			if ((myp.crouchoffset == 0) && (mym.waterlevel < 2) && (!mym.bNoGravity) && (myp.onground) && (myp.JumpTics == 0))
+			{
+				double jumpvelz = mym.JumpZ * 35 / TICRATE;
+				double jumpfac = 0;
+				for (let p = mym.Inv; p != null; p = p.Inv)
+				{
+					let pp = PowerHighJump(p);
+					if (pp)
+					{
+						double f = pp.Strength;
+						if (f > jumpfac) jumpfac = f;
+					}
+				}
+				if (jumpfac > 0) jumpvelz *= jumpfac;
+				mym.Vel.Z += jumpvelz;
+				IsFakeJumping = true;
+				mym.bOnMobj = false;
+				myp.jumpTics = -1;
+				if (!(myp.cheats & CF_PREDICTING)) mym.A_StartSound("*jump", CHAN_BODY);
+			}
+		}
+
+		if (!IsFakeJumping)
+		{
+			SetOrigin(master.Pos, false);
+			Vel = master.Vel;
+		}
+		else
+		{
+			float vz = Vel.z;
+			Vel = master.Vel;
+			Vel.z = vz;
+			vector3 oldvel = master.Vel;
+			master.SetOrigin((pos.x, pos.y, master.pos.z), true);
+			master.vel = oldvel;
+			master.MaxStepHeight = 0;
+			if (IsFakeJumping && myp.onground && !(cmd.buttons & BT_JUMP))
+			{
+				IsFakeJumping = false;
+				master.MaxStepHeight = master.default.MaxStepHeight;
+			}
+			if (IsFakeJumping && (abs(master.vel.z) < 1))
+			{
+				master.vel.z -= master.GetGravity() * 2;
+				master.MaxStepHeight = 0;
+				master.SetOrigin((pos.x, pos.y, master.pos.z - master.GetGravity() * 2), true);
+			}
+		}
+		bSlidesOnWalls = master.bSlidesOnWalls;
+		bDropOff = master.bDropOff;
+		bCanPass = master.bCanPass;
+		bWindThrust = master.bWindThrust;
+		bNoBlockMonst = master.bNoBlockMonst;
+		MaxStepHeight = master.default.MaxStepHeight;
+	}
+
+	override bool CanCollideWith(Actor other, bool passive)
+	{
+		if (other == master)
+			return false;
+		if (other.bMissile)
+			return false;
+		return true;
+	}
+
+	default
+	{
+		+BLOCKASPLAYER;
+		+SLIDESONWALLS;
+		+DROPOFF;
+		+CANPASS;
+		+WINDTHRUST;
+		+NOBLOCKMONST;
+		-SHOOTABLE;
+	}
+	states
+	{
+	Spawn:
+		TNT1 A -1;
+		Loop;
+	}
+}
