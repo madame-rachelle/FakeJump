@@ -122,16 +122,19 @@ class MoveDriver : actor
 			master.SetOrigin((pos.x, pos.y, master.pos.z), true);
 			master.vel = oldvel;
 			master.MaxStepHeight = 0;
-			if (IsFakeJumping && myp.onground && !(cmd.buttons & BT_JUMP))
+			if (IsFakeJumping && (myp.onground && !(cmd.buttons & BT_JUMP)) ||
+				(Level.IsJumpingAllowed() || (myp.cheats & (CF_FLY|CF_NOCLIP|CF_NOCLIP2)) || mym.bFly))
 			{
 				IsFakeJumping = false;
 				master.MaxStepHeight = master.default.MaxStepHeight;
+				master.bCanPass = master.default.bCanPass;
 			}
 			if (IsFakeJumping && (abs(master.vel.z) < 1))
 			{
 				master.vel.z -= master.GetGravity() * 2;
 				master.MaxStepHeight = 0;
 				master.SetOrigin((pos.x, pos.y, master.pos.z - master.GetGravity() * 2), true);
+				master.bCanPass = false;	// there's some bugs with the <x,<y,!z code, try to bypass them
 			}
 		}
 		bSlidesOnWalls = master.bSlidesOnWalls;
