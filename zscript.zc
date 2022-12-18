@@ -58,6 +58,7 @@ class FakeJumpEventHandler : StaticEventHandler
 class MoveDriver : actor
 {
 	bool IsFakeJumping;
+	float FakeCrouchFactor;
 
 	playerinfo myp;
 
@@ -67,6 +68,9 @@ class MoveDriver : actor
 		PlayerPawn mym = PlayerPawn(master);
 
 		Super.Tick();
+
+		if (FakeCrouchFactor == 0.0)
+			FakeCrouchFactor = 1.0;
 
 		if (!mym)
 			return;
@@ -137,6 +141,24 @@ class MoveDriver : actor
 				master.bCanPass = false;	// there's some bugs with the <x,<y,!z code, try to bypass them
 			}
 		}
+
+		if (!Level.IsCrouchingAllowed())
+		{
+			if (((cmd.buttons & (BT_JUMP|BT_CROUCH)) == BT_CROUCH) && (!mym.CheckFrozen()) && myp.Health > 0)
+			{
+				FakeCrouchFactor -= mym.CROUCHSPEED;
+			}
+			else
+			{
+				FakeCrouchFactor += mym.CROUCHSPEED;
+			}
+
+			FakeCrouchFactor = clamp(FakeCrouchFactor, 0.5, 1.0);
+
+			mym.viewheight = mym.default.ViewHeight * FakeCrouchFactor;
+			myp.crouchfactor = FakeCrouchFactor;
+		}
+
 		bSlidesOnWalls = master.bSlidesOnWalls;
 		bDropOff = master.bDropOff;
 		bCanPass = master.bCanPass;
