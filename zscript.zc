@@ -159,6 +159,7 @@ class MoveDriver : actor
 		+CANPASS;
 		+WINDTHRUST;
 		+NOBLOCKMONST;
+		+NOBLOCKMAP;
 		-SHOOTABLE;
 	}
 	states
